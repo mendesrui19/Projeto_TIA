@@ -1,4 +1,4 @@
-% P1 — Triagem SNS24 (protótipo académico). Não é o software oficial SNS24.
+% P1 — Triagem sintomática SNS24 (SWI-Prolog).
 :- use_module(library(lists)).
 
 % --- Base de dados (enunciado: factos / dados que o sistema usa) ---
@@ -321,7 +321,7 @@ avaliar_com_certeza(Sintomas, Faixa_etaria, Imunodeprimido, Resultado, Certeza) 
 
 % --- Interface (interação com o utilizador) ---
 executar :-
-    format('~nSNS24 — triagem sintomática (protótipo)~n808 24 24 24 | 112~n', []),
+    format('~nTriagem sintomática — SNS24~n808 24 24 24 | 112~n', []),
     perguntar_idade_anos(Anos),
     idade_categoria(Anos, Faixa_etaria),
     perguntar_imuno(Imunodeprimido),
