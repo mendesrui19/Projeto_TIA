@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Manchester Triage System</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="main-container">
+        <h1>Manchester Triage System</h1>
+        
+        <div id="approach-selection">
+            <div class="approach-options">
+                <button id="deductive-btn" class="approach-btn">Dedutiva</button>
+                <button id="inductive-btn" class="approach-btn">Indutiva</button>
+            </div>
+        </div>
+
+        <div id="case-selection" style="display: none;">
+            <h2>Avaliação Dedutiva</h2>
+            <div id="case-type-questions"></div>
+            <button id="identify-btn">Identificar Caso</button>
+        </div>
+
+        <div id="symptoms-selection" style="display: none;">
+            <h2>Sintomas:</h2>
+            <div id="symptoms-list"></div>
+            <button id="evaluate-btn">Avaliar</button>
+        </div>
+
+        <div id="inductive-questions" style="display: none;">
+            <h2>Avaliação Indutiva</h2>
+            <div id="symptom-questions"></div>
+            <button id="evaluate-inductive-btn">Avaliar</button>
+        </div>
+
+        <div id="result" style="display: none;">
+            <h2>Resultado da Triagem</h2>
+            <p><strong>Tipo de Caso:</strong> <span id="result-case"></span></p>
+            <p><strong>Cor da Pulseira:</strong> <span id="result-color"></span></p>
+            <p><strong>Sintomas:</strong></p>
+            <ul id="result-symptoms" class="regular-symptoms"></ul>
+            <div class="explanation"></div>
+            <button id="restart-btn">Voltar ao Início</button>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
