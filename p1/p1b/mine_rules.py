@@ -1,5 +1,3 @@
-# P1B — CSV → árvore → regras Prolog (membro/2).
-
 import os
 
 import pandas as pd
@@ -83,7 +81,11 @@ def main():
     percorrer_arvore(clf, nomes, 0, [], caminhos)
     blocos = [arvore_para_prolog(i, c, a) for i, (c, a) in enumerate(caminhos, start=1)]
     with open(OUT_PROLOG, "w", encoding="utf-8") as f:
-        f.write("/** P1B — mine_rules.py */\n\n" + "\n".join(blocos) + "\n")
+        f.write(
+            "% Base de conhecimento — regras aprendidas (gerado por mine_rules.py).\n\n"
+            + "\n".join(blocos)
+            + "\n"
+        )
     print(f"Actualizado {OUT_PROLOG} ({len(blocos)} regras).")
 
 

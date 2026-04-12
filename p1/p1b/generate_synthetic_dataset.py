@@ -1,5 +1,3 @@
-# P1B — CSV alinhado com triagem.pl (fluxo SNS24).
-
 import csv
 import os
 import random
