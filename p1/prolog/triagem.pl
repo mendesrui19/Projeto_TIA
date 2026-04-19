@@ -1,389 +1,465 @@
-% Triagem sintomática SNS24 (SWI-Prolog).
-% Estrutura: base de dados → base de conhecimento → inferência → interface.
-:- use_module(library(lists)).
+:- dynamic fact/2.
 
-% --- Utilitários: listas ---
-membro( X, [X|_] ).
-membro( X, [_|R] ) :- membro( X, R ).
-concatena([], L, L).
-concatena([X|L1], L2, [X|L3]) :- concatena(L1, L2, L3).
+% Operadores alinhados a sns24v2_incert.pl (aulas)
+:- op( 800, fx, if).
+:- op( 700, xfx, then).
+:- op( 600, xfx, with).
+:- op( 300, xfy, or).
+:- op( 200, xfy, and).
 
-% Base de dados — factos estáticos (idade, ordem do questionário, textos)
-% --- Faixa etária ---
-texto_idade(crianca, 'Criança').
-texto_idade(adulto, 'Adulto').
-texto_idade(idoso, 'Idoso').
-idade_categoria(Anos, crianca) :- Anos < 18, !.
-idade_categoria(Anos, idoso) :- Anos >= 65, !.
-idade_categoria(_, adulto).
+:- discontiguous( (if)/1 ).
+:- multifile( (if)/1 ).
 
-% --- Ordem das perguntas (entrada e complemento) ---
-entrada_algoritmo_ordem([tosse, febre, falta_ar, alteracao_olfato, alteracao_paladar]).
-ordem_apos_entrada([
-    contacto_infeccao_recente,
-    febre_alta,
-    congestao_nasal,
-    fadiga_mialgias,
-    sinais_graves_resp,
-    compromisso_via_aerea,
-    dor_toracica,
-    cefaleia,
-    confusao,
-    dor_abdominal,
-    disuria,
-    vomitos_persistentes,
-    desidratacao,
-    lipotimia
-]).
+% 1. BASE DE DADOS (perguntas = sintomas observaveis; respostas em fact/2)
 
-% --- Textos dos sintomas (literais das perguntas) ---
-texto_sintoma(tosse,
-    'Tosse nova ou claramente pior que o habitual').
-texto_sintoma(febre,
-    'Febre ou sensação febril').
-texto_sintoma(falta_ar,
-    'Dispneia — falta de ar, ofegação ou não completa uma frase ao falar').
-texto_sintoma(alteracao_olfato,
-    'Perda ou alteração súbita do olfato (cheiro)').
-texto_sintoma(alteracao_paladar,
-    'Perda ou alteração súbita do paladar (sabor)').
-texto_sintoma(contacto_infeccao_recente,
-    'Contacto próximo com infeção respiratória nos últimos 14 dias (ex. gripe/COVID no mesmo agregado)').
-texto_sintoma(febre_alta,
-    'Febre muito alta — ≥40 °C axilar ou ≥41 °C retal').
-texto_sintoma(congestao_nasal,
-    'Nariz entupido ou corrimento nasal').
-texto_sintoma(fadiga_mialgias,
-    'Fadiga ou dores musculares').
-texto_sintoma(sinais_graves_resp,
-    'Pieira, tiragens no peito/barriga, lábios ou unhas azulados ou arroxeados').
-texto_sintoma(compromisso_via_aerea,
-    'Sensação de garganta a fechar ou língua/lábios muito inchados (via aérea)').
-texto_sintoma(dor_toracica,
-    'Dor no peito').
-texto_sintoma(cefaleia,
-    'Cefaleia — dor de cabeça forte ou a piorar').
-texto_sintoma(confusao,
-    'Alteração de consciência — confusão, sonolência anormal ou desorientação').
-texto_sintoma(dor_abdominal,
-    'Dor ou desconforto forte no abdómen').
-texto_sintoma(disuria,
-    'Dor ou ardor ao urinar').
-texto_sintoma(vomitos_persistentes,
-    'Vómitos repetidos ou contínuos').
-texto_sintoma(desidratacao,
-    'Desidratação — pouca urina escura, sede forte, boca seca ou olhos fundos').
-texto_sintoma(lipotimia,
-    'Lipotimia — fraqueza súbita ou sensação de ir desmaiar').
+% ---- respiratorio ----
+pergunta( tosse,              'Tem tosse nova ou agravamento do padrao habitual').
+pergunta( tosse_agravada,     'A tosse esta pior do que o habitual').
+pergunta( tosse_persistente,  'A tosse dura ha varios dias').
+pergunta( tosse_produtiva,    'Tem tosse com catarro ou expectoracao').
+pergunta( tosse_com_sangue,   'Tem tosse com sangue').
+pergunta( falta_ar,           'Tem falta de ar ou dificuldade em respirar').
+pergunta( falta_ar_repouso,   'Tem falta de ar mesmo em repouso').
+pergunta( falta_ar_leve,      'Sente falta de ar ligeira ao fazer esforco').
+pergunta( pieira_ou_tiragem,  'Tem pieira, tiragem no peito ou labios/unhas azulados').
+pergunta( dor_garganta,       'Tem dor de garganta').
+pergunta( congestao_nasal,    'Tem o nariz entupido').
+pergunta( espirros,           'Tem tido varios espirros seguidos').
 
-% Base de conhecimento — regras de decisão e condições do questionário
-% --- Pré-requisitos do complemento (quando perguntar cada sintoma) ---
-tem_febre_confirmada(Sintomas_confirmados) :-
-    membro(febre, Sintomas_confirmados).
-tem_nucleo_respiratorio(Sintomas_confirmados) :-
-    ( membro(febre, Sintomas_confirmados)
-    ; membro(tosse, Sintomas_confirmados)
-    ; membro(falta_ar, Sintomas_confirmados)
-    ).
-tem_algum_sintoma_entrada(Sintomas_confirmados) :-
-    ( tem_nucleo_respiratorio(Sintomas_confirmados)
-    ; membro(alteracao_olfato, Sintomas_confirmados)
-    ; membro(alteracao_paladar, Sintomas_confirmados)
-    ).
-prereq_resto(contacto_infeccao_recente, Sintomas_confirmados) :-
-    tem_algum_sintoma_entrada(Sintomas_confirmados).
-prereq_resto(febre_alta, Sintomas_confirmados) :-
-    tem_febre_confirmada(Sintomas_confirmados).
-prereq_resto(congestao_nasal, Sintomas_confirmados) :-
-    membro(tosse, Sintomas_confirmados).
-prereq_resto(fadiga_mialgias, Sintomas_confirmados) :-
-    tem_nucleo_respiratorio(Sintomas_confirmados).
-prereq_resto(sinais_graves_resp, Sintomas_confirmados) :-
-    tem_nucleo_respiratorio(Sintomas_confirmados).
-prereq_resto(compromisso_via_aerea, Sintomas_confirmados) :-
-    ( membro(falta_ar, Sintomas_confirmados)
-    ; membro(sinais_graves_resp, Sintomas_confirmados)
-    ).
-prereq_resto(dor_toracica, Sintomas_confirmados) :-
-    tem_nucleo_respiratorio(Sintomas_confirmados).
-prereq_resto(cefaleia, Sintomas_confirmados) :-
-    tem_algum_sintoma_entrada(Sintomas_confirmados).
-prereq_resto(confusao, Sintomas_confirmados) :-
-    ( membro(cefaleia, Sintomas_confirmados)
-    ; tem_febre_confirmada(Sintomas_confirmados)
-    ).
-prereq_resto(dor_abdominal, Sintomas_confirmados) :-
-    tem_algum_sintoma_entrada(Sintomas_confirmados).
-prereq_resto(disuria, Sintomas_confirmados) :-
-    ( membro(dor_abdominal, Sintomas_confirmados)
-    ; tem_nucleo_respiratorio(Sintomas_confirmados)
-    ).
-prereq_resto(vomitos_persistentes, Sintomas_confirmados) :-
-    ( membro(dor_abdominal, Sintomas_confirmados)
-    ; tem_nucleo_respiratorio(Sintomas_confirmados)
-    ).
-prereq_resto(desidratacao, Sintomas_confirmados) :-
-    ( membro(vomitos_persistentes, Sintomas_confirmados)
-    ; tem_febre_confirmada(Sintomas_confirmados)
-    ; membro(dor_abdominal, Sintomas_confirmados)
-    ).
-prereq_resto(lipotimia, Sintomas_confirmados) :-
-    ( membro(confusao, Sintomas_confirmados)
-    ; membro(falta_ar, Sintomas_confirmados)
-    ; membro(desidratacao, Sintomas_confirmados)
-    ; membro(cefaleia, Sintomas_confirmados)
-    ; membro(vomitos_persistentes, Sintomas_confirmados)
-    ).
+% ---- febre ----
+pergunta( febre,              'Tem febre ou sensacao febril').
+pergunta( febre_alta_40,      'A febre axilar e superior a 40C ou retal superior a 41C').
+pergunta( febre_persistente,  'Tem febre ha mais de 48 horas').
+pergunta( nao_melhora_antipiretico, 'A febre mantem-se mesmo com paracetamol ou ibuprofeno').
+pergunta( convulsao_febril,   'Teve episodio de convulsao associada a febre').
 
-% --- Encaminhamento: regras manuais + regras aprendidas (regras_auto.pl) ---
-:- consult(regras_auto).
-regra_encaminhamento(1, encaminhar_112_imediato, Sintomas, _, _, Certeza) :-
-    membro(compromisso_via_aerea, Sintomas),
-    Certeza = 0.99.
-regra_encaminhamento(1, encaminhar_112_imediato, Sintomas, _, _, Certeza) :-
-    membro(sinais_graves_resp, Sintomas),
-    Certeza = 0.98.
-regra_encaminhamento(1, encaminhar_112_imediato, Sintomas, _, _, Certeza) :-
-    membro(dor_toracica, Sintomas),
-    membro(falta_ar, Sintomas),
-    Certeza = 0.95.
-regra_encaminhamento(1, encaminhar_112_imediato, Sintomas, _, _, Certeza) :-
-    membro(confusao, Sintomas),
-    Certeza = 0.92.
-regra_encaminhamento(1, encaminhar_112_imediato, Sintomas, _, _, Certeza) :-
-    membro(lipotimia, Sintomas),
-    Certeza = 0.9.
-regra_encaminhamento(2, contactar_sns24_urgente, Sintomas, idoso, _, Certeza) :-
-    membro(febre_alta, Sintomas),
-    Certeza = 0.88.
-regra_encaminhamento(2, contactar_sns24_urgente, Sintomas, _, sim, Certeza) :-
-    membro(febre_alta, Sintomas),
-    Certeza = 0.88.
-regra_encaminhamento(2, contactar_sns24_urgente, Sintomas, _, _, Certeza) :-
-    membro(febre_alta, Sintomas),
-    Certeza = 0.85.
-regra_encaminhamento(2, contactar_sns24_urgente, Sintomas, crianca, _, Certeza) :-
-    membro(vomitos_persistentes, Sintomas),
-    membro(desidratacao, Sintomas),
-    Certeza = 0.85.
-regra_encaminhamento(3, linha_sns24_orientacao, Sintomas, adulto, _, Certeza) :-
-    membro(contacto_infeccao_recente, Sintomas),
-    ( membro(febre, Sintomas) ; membro(tosse, Sintomas) ),
-    \+ membro(sinais_graves_resp, Sintomas),
-    \+ membro(falta_ar, Sintomas),
-    Certeza = 0.76.
-regra_encaminhamento(3, linha_sns24_orientacao, Sintomas, adulto, _, Certeza) :-
-    membro(febre, Sintomas),
-    \+ membro(febre_alta, Sintomas),
-    \+ membro(dor_toracica, Sintomas),
-    \+ membro(falta_ar, Sintomas),
-    Certeza = 0.75.
-regra_encaminhamento(3, linha_sns24_orientacao, Sintomas, _, _, Certeza) :-
-    membro(tosse, Sintomas),
-    membro(congestao_nasal, Sintomas),
-    \+ membro(falta_ar, Sintomas),
-    \+ membro(dor_toracica, Sintomas),
-    Certeza = 0.7.
-regra_encaminhamento(3, linha_sns24_orientacao, Sintomas, _, _, Certeza) :-
-    membro(fadiga_mialgias, Sintomas),
-    ( membro(febre, Sintomas) ; membro(tosse, Sintomas) ),
-    \+ membro(falta_ar, Sintomas),
-    Certeza = 0.68.
-regra_encaminhamento(3, linha_sns24_orientacao, Sintomas, _, _, Certeza) :-
-    ( membro(dor_abdominal, Sintomas) ; membro(disuria, Sintomas) ),
-    \+ membro(confusao, Sintomas),
-    \+ membro(falta_ar, Sintomas),
-    Certeza = 0.66.
-regra_encaminhamento(4, autocuidado_e_observacao, Sintomas, _, _, Certeza) :-
-    ( membro(alteracao_olfato, Sintomas)
-    ; membro(alteracao_paladar, Sintomas)
-    ),
-    \+ membro(falta_ar, Sintomas),
-    \+ membro(febre_alta, Sintomas),
-    \+ membro(sinais_graves_resp, Sintomas),
-    Certeza = 0.6.
-regra_encaminhamento(4, autocuidado_e_observacao, Sintomas, _, _, Certeza) :-
-    membro(cefaleia, Sintomas),
-    \+ membro(confusao, Sintomas),
-    \+ membro(dor_toracica, Sintomas),
-    Certeza = 0.65.
-regra_encaminhamento(5, informacao_geral_prevencao, Sintomas, _, _, Certeza) :-
-    membro(assintomatico, Sintomas),
-    Certeza = 0.5.
-regra_encaminhamento(20, linha_sns24_orientacao, Sintomas, _, _, Certeza) :-
-    Sintomas \= [],
-    Certeza = 0.55.
-regra_encaminhamento(8, informacao_geral_prevencao, [], _, _, Certeza) :-
-    Certeza = 0.4.
+% ---- neurologico ----
+pergunta( dor_cabeca,         'Tem dores de cabeca').
+pergunta( dor_cabeca_forte,   'A dor de cabeca e forte ou intensa').
+pergunta( rigidez_pescoco,    'Tem rigidez no pescoco').
+pergunta( sensibilidade_luz,  'Tem sensibilidade incomum a luz').
+pergunta( manchas_pele,       'Tem manchas, pontos vermelhos ou roxos na pele').
+pergunta( sonolencia_anormal, 'Tem sonolencia fora do normal ou dificuldade em manter-se acordado').
+pergunta( confusao,           'Apresenta confusao ou desorientacao').
+pergunta( alteracao_consciencia, 'Perdeu a consciencia ou desmaiou recentemente').
+pergunta( convulsoes,         'Teve convulsoes').
+pergunta( fraqueza_lado_corpo,'Tem fraqueza ou paralisia de um lado do corpo').
 
-% --- Textos e explicações por tipo de conclusão ---
-texto_recomendacao(encaminhar_112_imediato,
-    '112 — emergência imediata.').
-texto_recomendacao(contactar_sns24_urgente,
-    'SNS24 808 24 24 24 — com urgência.').
-texto_recomendacao(linha_sns24_orientacao,
-    'SNS24 808 24 24 24 — orientação / triagem.').
-texto_recomendacao(autocuidado_e_observacao,
-    'Autocuidado; se piorar, SNS24.').
-texto_recomendacao(informacao_geral_prevencao,
-    'Sem sintomas indicados; dúvidas: SNS24.').
-explicacao_regra(encaminhar_112_imediato,
-    'Alarme: via aérea, respiração grave, tórax + dispneia, ou neurológico.').
-explicacao_regra(contactar_sns24_urgente,
-    'Febre muito alta ou desidratação relevante em criança.').
-explicacao_regra(linha_sns24_orientacao,
-    'Triagem telefónica / exposição / sintomas sem emergência imediata.').
-explicacao_regra(autocuidado_e_observacao,
-    'Quadro ligeiro sem critérios de alarme imediato.').
-explicacao_regra(informacao_geral_prevencao,
-    'Nenhum sintoma assinalado.').
+% ---- emergencia ----
+pergunta( compromisso_via_aerea, 'Sente a garganta a fechar ou lingua/labios muito inchados').
+pergunta( dor_toracica,       'Tem dor no peito intensa ou opressiva').
+pergunta( sangramento_abundante, 'Tem sangramento abundante').
 
-% Sistema de inferência — motor (reúne regras, ordena por prioridade, conclui)
-% --- Fonte de regras: manuais + candidato_aprendido/6 ---
-todas_regras(Prioridade, Acao, Sintomas, Faixa_etaria, Imunodeprimido, Certeza) :-
-    regra_encaminhamento(Prioridade, Acao, Sintomas, Faixa_etaria, Imunodeprimido, Certeza).
-todas_regras(Prioridade, Acao, Sintomas, Faixa_etaria, Imunodeprimido, Certeza) :-
-    candidato_aprendido(Prioridade, Acao, Sintomas, Faixa_etaria, Imunodeprimido, Certeza).
+% ---- olfato / paladar ----
+pergunta( alteracao_olfato,   'Tem perda ou alteracao subita do olfato nos ultimos 7 dias').
+pergunta( olfato_quimio,      'Essa perda de olfato surgiu depois de quimioterapia').
+pergunta( olfato_trauma,      'Essa perda de olfato surgiu depois de trauma ou cirurgia nasal').
+pergunta( alteracao_paladar,  'Tem perda ou alteracao subita do paladar nos ultimos 7 dias').
+pergunta( paladar_quimio,     'Essa alteracao do paladar surgiu depois de quimioterapia').
+pergunta( paladar_trauma,     'Essa alteracao do paladar surgiu depois de trauma ou cirurgia').
 
-% --- Escolha do resultado (com fallback) ---
-avaliar(Sintomas, Faixa_etaria, Imunodeprimido, resultado(Acao, Texto, Explicacao)) :-
-    findall(
-        Prioridade-(Acao_cand, Certeza),
-        todas_regras(Prioridade, Acao_cand, Sintomas, Faixa_etaria, Imunodeprimido, Certeza),
-        Candidatos
-    ),
-    Candidatos \= [],
-    keysort(Candidatos, [_-(Acao, _Certeza_escolhida)|_]),
-    texto_recomendacao(Acao, Texto),
-    explicacao_regra(Acao, Explicacao),
-    !.
-avaliar(Sintomas, _, _, resultado(linha_sns24_orientacao, Texto, Explicacao)) :-
-    Sintomas \= [],
-    texto_recomendacao(linha_sns24_orientacao, Texto),
-    explicacao_regra(linha_sns24_orientacao, Explicacao).
-avaliar([], _, _, resultado(informacao_geral_prevencao, Texto, Explicacao)) :-
-    texto_recomendacao(informacao_geral_prevencao, Texto),
-    explicacao_regra(informacao_geral_prevencao, Explicacao).
+% ---- digestivo ----
+pergunta( nausea,             'Tem nauseas').
+pergunta( vomitos,            'Tem vomitos').
+pergunta( vomitos_intensos,   'Os vomitos sao intensos ou frequentes').
+pergunta( diarreia,           'Tem diarreia').
+pergunta( diarreia_grave,     'A diarreia e muito abundante ou frequente').
+pergunta( dor_abdominal,      'Tem dor abdominal').
+pergunta( dor_abdominal_forte,'A dor abdominal e forte ou intensa').
+pergunta( disuria,            'Tem dor, ardor ou desconforto ao urinar').
+pergunta( desidratacao,       'Tem sinais de desidratacao (boca seca, pouca urina, olhos encovados)').
 
-% --- Variante com factor de certeza explícito ---
-avaliar_com_certeza(Sintomas, Faixa_etaria, Imunodeprimido, resultado(Acao, Texto, Explicacao), Certeza) :-
-    findall(
-        Prioridade-(Acao_cand, Certeza0),
-        todas_regras(Prioridade, Acao_cand, Sintomas, Faixa_etaria, Imunodeprimido, Certeza0),
-        Candidatos
-    ),
-    Candidatos \= [],
-    keysort(Candidatos, [_-(Acao, Certeza)|_]),
-    texto_recomendacao(Acao, Texto),
-    explicacao_regra(Acao, Explicacao),
-    !.
-avaliar_com_certeza(Sintomas, Faixa_etaria, Imunodeprimido, Resultado, Certeza) :-
-    avaliar(Sintomas, Faixa_etaria, Imunodeprimido, Resultado),
-    Certeza = 0.5.
+% ---- sintomas gerais ----
+pergunta( fadiga_mialgias,    'Tem cansaco ou dores musculares generalizadas').
+pergunta( agravamento,        'Os sintomas tem vindo a piorar').
+pergunta( agravamento_48h,    'Esse agravamento aconteceu nas ultimas 48 horas').
 
-% Interface — interação com o utilizador (consola)
-executar :-
-    format('~nTriagem sintomática — SNS24~n808 24 24 24 | 112~n', []),
-    perguntar_idade_anos(Anos),
-    idade_categoria(Anos, Faixa_etaria),
-    perguntar_imuno(Imunodeprimido),
-    perguntar_fluxo_completo(Sintomas),
-    avaliar_com_certeza(Sintomas, Faixa_etaria, Imunodeprimido, resultado(Acao, Texto, Explicacao), Certeza),
-    texto_idade(Faixa_etaria, Grupo_txt),
-    Percentagem is Certeza * 100,
-    format(
-        '~n--- ~d anos (~w) ---~n~w~n~w~n~w~n~nFactor de certeza da regra: ~1f %~n',
-        [Anos, Grupo_txt, Acao, Texto, Explicacao, Percentagem]
-    ),
-    menu_extra(Sintomas, Faixa_etaria, Imunodeprimido).
+% ---- contexto / risco ----
+pergunta( imunodeprimido,     'E imunodeprimido, tem problema renal grave ou esta em dialise').
+pergunta( tratamento_oncologico, 'Esta atualmente em tratamento oncologico ativo').
+pergunta( gravidez,           'Esta gravida ou teve parto recente').
+pergunta( doenca_cronica,     'Tem alguma doenca cronica (cardiaca, respiratoria, renal, diabetes)').
+pergunta( idade_risco,        'Tem 65 ou mais anos, ou e crianca com menos de 5 anos').
+pergunta( apoio_domicilio,    'Tem telemovel e alguem que o possa auxiliar em casa').
+pergunta( contacto_recente,   'Contacto proximo com infecao respiratoria confirmada nos ultimos 14 dias').
+pergunta( trauma_recente,     'Fez cirurgia, biopsia ou teve traumatismo recente').
+pergunta( sintomas_pos_trauma,'Apos esse evento teve dor, febre ou agravamento do estado geral').
 
-% --- Leitura de idade e respostas s/n ---
-perguntar_idade_anos(Anos) :-
-    format('~nIdade (anos): ', []),
-    read_line_to_string(user_input, Linha_bruta),
-    normalize_space(string(Linha), Linha_bruta),
-    ( Linha = "" ->
-        perguntar_idade_anos(Anos)
-    ; number_string(N, Linha),
-      integer(N),
-      between(0, 120, N) ->
-        Anos = N
+% ---- disposicoes ----
+disposicao( inem,                  'INEM / 112 - emergencia medica imediata').
+disposicao( adr_su,                'ADR-SU - deslocar-se ao Servico de Urgencia').
+disposicao( adr_csp,               'ADR-CSP - contactar Centro de Saude (CSP)').
+disposicao( contactar_medico,      'Contactar o medico assistente').
+disposicao( autocuidado_seguimento,'Autocuidado com isolamento domiciliario + seguimento telefonico').
+disposicao( autocuidado,           'Autocuidado com isolamento no domicilio').
+disposicao( transferir_triagem,    'Transferencia SNS24 - Triagem (orientacao pela linha)').
+
+% Ordem de gravidade para escolha final (primeiro com confianca acima do corte ganha).
+ordem_disposicao( [
+    inem, adr_su, adr_csp, contactar_medico,
+    autocuidado_seguimento, autocuidado, transferir_triagem
+] ).
+
+
+% 2. BASE DE CONHECIMENTO — if Cond then Conclusao with CF (aulas)
+
+% ---- taxonomia ----
+if febre_alta_40                then febre             with 1.0.
+if febre_persistente            then febre             with 1.0.
+if tosse_persistente            then tosse             with 1.0.
+if tosse_produtiva              then tosse             with 1.0.
+if tosse_agravada               then tosse             with 1.0.
+if falta_ar_repouso             then falta_ar          with 1.0.
+if falta_ar_leve                then falta_ar          with 1.0.
+if pieira_ou_tiragem            then falta_ar          with 1.0.
+if vomitos_intensos             then vomitos           with 1.0.
+if diarreia_grave               then diarreia          with 1.0.
+if dor_abdominal_forte          then dor_abdominal     with 1.0.
+if tratamento_oncologico        then imunodeprimido    with 1.0.
+if alteracao_consciencia        then confusao          with 1.0.
+if sonolencia_anormal           then confusao          with 1.0.
+if fraqueza_lado_corpo          then confusao          with 1.0.
+
+% ---- agrupamentos clinicos ----
+if tosse                        then sintoma_respiratorio with 1.0.
+if falta_ar                     then sintoma_respiratorio with 1.0.
+if dor_garganta                 then sintoma_respiratorio with 1.0.
+if congestao_nasal              then sintoma_respiratorio with 1.0.
+if febre                        then sintoma_geral        with 1.0.
+if fadiga_mialgias              then sintoma_geral        with 1.0.
+if nausea                       then sintoma_digestivo    with 1.0.
+if vomitos                      then sintoma_digestivo    with 1.0.
+if diarreia                     then sintoma_digestivo    with 1.0.
+if dor_abdominal                then sintoma_digestivo    with 1.0.
+if dor_cabeca                   then sintoma_neurologico  with 1.0.
+if dor_cabeca_forte             then sintoma_neurologico  with 1.0.
+
+% ---- cefaleia_grave ----
+if dor_cabeca_forte and rigidez_pescoco   then cefaleia_grave with 1.0.
+if dor_cabeca_forte and sensibilidade_luz then cefaleia_grave with 1.0.
+if dor_cabeca_forte and manchas_pele      then cefaleia_grave with 1.0.
+
+% ---- fatores de risco ----
+if imunodeprimido               then risco_agravamento with 1.0.
+if doenca_cronica               then risco_agravamento with 1.0.
+if idade_risco                  then risco_agravamento with 1.0.
+if gravidez                     then risco_agravamento with 1.0.
+
+% ---- inem ----
+if compromisso_via_aerea                         then inem with 0.98.
+if pieira_ou_tiragem                             then inem with 0.95.
+if dor_toracica and falta_ar                     then inem with 0.95.
+if alteracao_consciencia                         then inem with 0.98.
+if convulsoes                                    then inem with 0.98.
+if fraqueza_lado_corpo                           then inem with 0.97.
+if tosse_com_sangue                              then inem with 0.96.
+if sangramento_abundante                         then inem with 0.98.
+if confusao                                      then inem with 0.93.
+if cefaleia_grave and febre                      then inem with 0.94.
+if trauma_recente and alteracao_consciencia      then inem with 0.96.
+
+% ---- adr-su ----
+if febre_alta_40 and imunodeprimido              then adr_su with 0.92.
+if convulsao_febril                              then adr_su with 0.9.
+if febre and manchas_pele                        then adr_su with 0.88.
+if dor_abdominal_forte                           then adr_su with 0.9.
+if vomitos_intensos                              then adr_su with 0.88.
+if desidratacao and febre                        then adr_su with 0.87.
+if diarreia_grave and desidratacao               then adr_su with 0.86.
+if falta_ar and febre                            then adr_su with 0.85.
+if agravamento_48h and risco_agravamento         then adr_su with 0.9.
+if trauma_recente and sintomas_pos_trauma        then adr_su with 0.88.
+
+% ---- adr-csp / medico ----
+if febre_alta_40                                 then adr_csp with 0.82.
+if febre_persistente and nao_melhora_antipiretico then adr_csp with 0.8.
+if dor_abdominal and febre                       then adr_csp with 0.78.
+if dor_abdominal and disuria                     then adr_csp with 0.8.
+if disuria                                       then contactar_medico with 0.75.
+
+% ---- autocuidado + seguimento ----
+if tosse and febre and contacto_recente          then autocuidado_seguimento with 0.85.
+if febre and fadiga_mialgias and apoio_domicilio then autocuidado_seguimento with 0.82.
+if sintoma_respiratorio and sintoma_geral and apoio_domicilio then autocuidado_seguimento with 0.8.
+if febre and apoio_domicilio                     then autocuidado_seguimento with 0.75.
+
+% ---- autocuidado ----
+if tosse and tosse_produtiva and apoio_domicilio then autocuidado with 0.78.
+if alteracao_olfato and apoio_domicilio          then autocuidado with 0.76.
+if alteracao_paladar and apoio_domicilio         then autocuidado with 0.76.
+if espirros and congestao_nasal                  then autocuidado with 0.72.
+if dor_garganta and apoio_domicilio              then autocuidado with 0.74.
+if tosse and apoio_domicilio                     then autocuidado with 0.7.
+
+% ---- fallback triagem ----
+if febre                                         then transferir_triagem with 0.55.
+if tosse                                         then transferir_triagem with 0.5.
+if falta_ar                                      then transferir_triagem with 0.55.
+if sintoma_digestivo                             then transferir_triagem with 0.52.
+
+:- ( exists_file('regras_aprendidas.pl') -> consult('regras_aprendidas') ; true ).
+
+
+% 3. MOTOR DE INFERENCIA (encadeamento para a frente + certeza, estilo sns24v2)
+
+corte_certeza( 0.08 ).
+
+composed_fact( Cond, Cf ) :-
+    fact( Cond, Cf ),
+    corte_certeza( T ),
+    Cf > T.
+
+composed_fact( Cond1 and Cond2, Cf ) :-
+    composed_fact( Cond1, Cf1 ),
+    composed_fact( Cond2, Cf2 ),
+    Cf is min( Cf1, Cf2 ).
+
+composed_fact( Cond1 or Cond2, Cf ) :-
+    composed_fact( Cond1, Cf1 ),
+    composed_fact( Cond2, Cf2 ), !,
+    Cf is max( Cf1, Cf2 ).
+
+composed_fact( Cond1 or _Cond2, Cf ) :-
+    composed_fact( Cond1, Cf ), !.
+
+composed_fact( _Cond1 or Cond2, Cf ) :-
+    composed_fact( Cond2, Cf ).
+
+novo_facto_derivado( Concl, CfFinal ) :-
+    if Cond then Concl with CfRegra,
+    \+ fact( Concl, _ ),
+    composed_fact( Cond, CfCond ),
+    CfFinal is CfCond * CfRegra,
+    corte_certeza( T ),
+    CfFinal > T.
+
+inferir_para_frente :-
+    novo_facto_derivado( Novo, Cf ), !,
+    assert( fact( Novo, Cf ) ),
+    inferir_para_frente.
+inferir_para_frente.
+
+
+% 4. INTERFACE
+
+% Ja respondeu (sim com 1.0 ou nao com 0.0 — ambos bloqueiam nova pergunta).
+ja_sabe( F ) :-
+    fact( F, _ ), !.
+
+% Resposta afirmativa para ramificar perguntas de aprofundamento.
+resposta_sim( F ) :-
+    fact( F, C ),
+    C >= 0.5.
+
+perguntar( F ) :-
+    ja_sabe( F ), !.
+perguntar( F ) :-
+    pergunta( F, Texto ),
+    nl, write('  '), write( Texto ), write('? ' ),
+    read( X ),
+    retractall( fact( F, _ ) ),
+    ( (X == s ; X == sim) ->
+        assert( fact( F, 1.0 ) )
     ;
-        perguntar_idade_anos(Anos)
-    ).
-perguntar_so_sn(Rotulo, Resposta) :-
-    format('~n~w s/n: ', [Rotulo]),
-    read_line_to_string(user_input, Linha_bruta),
-    normalize_space(string(Linha), Linha_bruta),
-    ( Linha = "" ->
-        perguntar_so_sn(Rotulo, Resposta)
-    ; string_lower(Linha, Linha_minusculas),
-      ( sub_string(Linha_minusculas, 0, 1, _, "s") ->
-          Resposta = sim
-      ; sub_string(Linha_minusculas, 0, 1, _, "n") ->
-          Resposta = nao
-      ; perguntar_so_sn(Rotulo, Resposta)
-      )
-    ).
-perguntar_imuno(Imunodeprimido) :-
-    perguntar_so_sn('Imunodeprimido (ex. defesas fracas por doença ou tratamento)?', R),
-    ( R = sim -> Imunodeprimido = sim ; Imunodeprimido = nao ).
-
-% --- Menu após o resultado ---
-menu_extra(Sintomas, Faixa_etaria, Imunodeprimido) :-
-    format('~n1=rever certeza e explicação  0=terminar~n', []),
-    read_line_to_string(user_input, Linha_bruta),
-    normalize_space(string(Linha), Linha_bruta),
-    string_lower(Linha, Linha_minusculas),
-    ( Linha_minusculas = "" ->
-        menu_extra(Sintomas, Faixa_etaria, Imunodeprimido)
-    ; sub_string(Linha_minusculas, 0, 1, _, Caracter),
-      ( ( Caracter = "1" ; Caracter = "s" ) ->
-        avaliar_com_certeza(Sintomas, Faixa_etaria, Imunodeprimido, resultado(_, Texto2, Explicacao2), Certeza),
-        Percentagem is Certeza * 100,
-        format('~n~0f%% — ~w~n~w~n', [Percentagem, Texto2, Explicacao2])
-      ; ( Caracter = "0" ; Caracter = "n" ) ->
-        true
-      ; menu_extra(Sintomas, Faixa_etaria, Imunodeprimido)
-      )
+        assert( fact( F, 0.0 ) )
     ).
 
-% --- Questionário: entrada fixa + ramo complementar condicional ---
-perguntar_fluxo_completo(Sintomas_finais) :-
-    format('~n[Entrada — vias respiratórias / COVID]~n', []),
-    entrada_algoritmo_ordem(Ordem_entrada),
-    perguntar_lista_sintomas(Ordem_entrada, [], Sintomas_apos_entrada),
-    ( entrada_sem_sintomas(Sintomas_apos_entrada) ->
-        format('~n(Nenhum dos cinco critérios de entrada.)~n', []),
-        perguntar_so_sn('Confirma assintomático para este ramo (não tem estes sintomas de entrada)', Resposta),
-        ( Resposta = sim -> Sintomas_finais = [assintomatico] ; Sintomas_finais = [] )
-    ; format('~n[Questionário complementar]~n', []),
-      ordem_apos_entrada(Ordem_complemento),
-      perguntar_lista_condicional(Ordem_complemento, Sintomas_apos_entrada, Sintomas_finais)
+perguntar_e_inferir( F ) :-
+    perguntar( F ),
+    inferir_para_frente.
+
+decidido_grave :-
+    fact( inem, C ),
+    C > 0.08,
+    !.
+decidido_grave :-
+    fact( adr_su, C2 ),
+    C2 > 0.08,
+    !.
+
+perguntar_se_nao_grave( _ ) :-
+    decidido_grave, !.
+perguntar_se_nao_grave( F ) :-
+    perguntar_e_inferir( F ).
+
+
+% 5. SUBFLUXOS (ordem e nomes distintos do projetoV4 do colega:
+%    aqui febre ANTES do bloco de contexto/risco)
+
+bloqueio_emergencia :-
+    nl, write('--- Alerta: emergencia ---'), nl,
+    perguntar_se_nao_grave( compromisso_via_aerea ),
+    perguntar_se_nao_grave( dor_toracica ),
+    perguntar_se_nao_grave( pieira_ou_tiragem ),
+    perguntar_se_nao_grave( alteracao_consciencia ),
+    perguntar_se_nao_grave( convulsoes ),
+    perguntar_se_nao_grave( fraqueza_lado_corpo ),
+    perguntar_se_nao_grave( sangramento_abundante ),
+    perguntar_se_nao_grave( tosse_com_sangue ),
+    perguntar_se_nao_grave( confusao ).
+
+triagem_termica :-
+    nl, write('--- Febre e sinais associados ---'), nl,
+    perguntar_se_nao_grave( febre ),
+    ( resposta_sim( febre ) ->
+        perguntar_se_nao_grave( febre_alta_40 ),
+        ( resposta_sim( febre_alta_40 ) -> true
+        ;   perguntar_se_nao_grave( febre_persistente ),
+            ( resposta_sim( febre_persistente ) ->
+                perguntar_se_nao_grave( nao_melhora_antipiretico )
+            ;   true )
+        ),
+        perguntar_se_nao_grave( convulsao_febril ),
+        perguntar_se_nao_grave( manchas_pele ),
+        perguntar_se_nao_grave( dor_cabeca_forte ),
+        ( resposta_sim( dor_cabeca_forte ) ->
+            perguntar_se_nao_grave( rigidez_pescoco ),
+            perguntar_se_nao_grave( sensibilidade_luz )
+        ;   true )
+    ;   true ).
+
+triagem_perfil_risco :-
+    nl, write('--- Perfil e contexto ---'), nl,
+    perguntar_se_nao_grave( idade_risco ),
+    perguntar_se_nao_grave( doenca_cronica ),
+    perguntar_se_nao_grave( tratamento_oncologico ),
+    perguntar_se_nao_grave( gravidez ),
+    perguntar_se_nao_grave( imunodeprimido ),
+    perguntar_se_nao_grave( trauma_recente ),
+    ( resposta_sim( trauma_recente ) -> perguntar_se_nao_grave( sintomas_pos_trauma ) ; true ),
+    perguntar_se_nao_grave( contacto_recente ),
+    perguntar_se_nao_grave( apoio_domicilio ).
+
+triagem_respiratoria :-
+    nl, write('--- Via aerea e tosse ---'), nl,
+    perguntar_se_nao_grave( falta_ar ),
+    ( resposta_sim( falta_ar ) ->
+        perguntar_se_nao_grave( falta_ar_repouso ),
+        perguntar_se_nao_grave( falta_ar_leve )
+    ;   true ),
+    perguntar_se_nao_grave( tosse ),
+    ( resposta_sim( tosse ) ->
+        perguntar_se_nao_grave( tosse_agravada ),
+        perguntar_se_nao_grave( tosse_persistente ),
+        perguntar_se_nao_grave( tosse_produtiva )
+    ;   true ),
+    perguntar_se_nao_grave( dor_garganta ),
+    perguntar_se_nao_grave( congestao_nasal ),
+    perguntar_se_nao_grave( espirros ).
+
+triagem_chemosensorial :-
+    nl, write('--- Olfato e paladar ---'), nl,
+    perguntar_se_nao_grave( alteracao_olfato ),
+    ( resposta_sim( alteracao_olfato ) ->
+        perguntar_se_nao_grave( olfato_quimio ),
+        ( resposta_sim( olfato_quimio ) -> true
+        ;   perguntar_se_nao_grave( olfato_trauma ) )
+    ;   true ),
+    perguntar_se_nao_grave( alteracao_paladar ),
+    ( resposta_sim( alteracao_paladar ) ->
+        perguntar_se_nao_grave( paladar_quimio ),
+        ( resposta_sim( paladar_quimio ) -> true
+        ;   perguntar_se_nao_grave( paladar_trauma ) )
+    ;   true ).
+
+triagem_digestiva :-
+    nl, write('--- Abdomen e hidratacao ---'), nl,
+    perguntar_se_nao_grave( nausea ),
+    perguntar_se_nao_grave( vomitos ),
+    ( resposta_sim( vomitos ) -> perguntar_se_nao_grave( vomitos_intensos ) ; true ),
+    perguntar_se_nao_grave( diarreia ),
+    ( resposta_sim( diarreia ) -> perguntar_se_nao_grave( diarreia_grave ) ; true ),
+    perguntar_se_nao_grave( dor_abdominal ),
+    ( resposta_sim( dor_abdominal ) -> perguntar_se_nao_grave( dor_abdominal_forte ) ; true ),
+    perguntar_se_nao_grave( disuria ),
+    perguntar_se_nao_grave( desidratacao ).
+
+triagem_sistema_geral :-
+    nl, write('--- Estado geral ---'), nl,
+    perguntar_se_nao_grave( fadiga_mialgias ),
+    perguntar_se_nao_grave( agravamento ),
+    ( resposta_sim( agravamento ) -> perguntar_se_nao_grave( agravamento_48h ) ; true ).
+
+
+iniciar :-
+    retractall( fact( _, _ ) ),
+    banner,
+    bloqueio_emergencia,
+    triagem_termica,
+    triagem_perfil_risco,
+    triagem_respiratoria,
+    triagem_chemosensorial,
+    triagem_digestiva,
+    triagem_sistema_geral,
+    concluir.
+
+banner :-
+    nl,
+    write('   TRIAGEM SNS24  -  808 24 24 24   |   Emergencia: 112'), nl,
+    write('   Responda a cada pergunta com:  s.   (sim)    ou   n.   (nao)'), nl,
+    write('   (nao esquecer o ponto final depois da letra!)'), nl,
+    write('   Nota: nao = grau 0.0; sim = 1.0 (modelo das aulas com fact/2).'), nl.
+
+concluir :-
+    inferir_para_frente,
+    ( decisao_encaminhamento( Melhor, Cf ) ->
+        apresentar( Melhor, Cf )
+    ;
+        apresentar_default
     ).
 
-% --- Percorrer listas de sintomas (entrada e complemento) ---
-entrada_sem_sintomas([]).
-perguntar_lista_sintomas([], Sintomas_acumulados, Sintomas_acumulados).
-perguntar_lista_sintomas([Sintoma_cand|Resto], Antes, Final) :-
-    texto_sintoma(Sintoma_cand, Texto),
-    atom_concat(Texto, '?', Pergunta),
-    perguntar_so_sn(Pergunta, Resposta),
-    ( Resposta = sim ->
-        concatena(Antes, [Sintoma_cand], Proximo)
-    ; Proximo = Antes
-    ),
-    perguntar_lista_sintomas(Resto, Proximo, Final).
-perguntar_lista_condicional([], Sintomas_acumulados, Sintomas_acumulados).
-perguntar_lista_condicional([Sintoma_cand|Resto], Antes, Final) :-
-    ( prereq_resto(Sintoma_cand, Antes) ->
-        texto_sintoma(Sintoma_cand, Texto),
-        atom_concat(Texto, '?', Pergunta),
-        perguntar_so_sn(Pergunta, Resposta),
-        ( Resposta = sim ->
-            concatena(Antes, [Sintoma_cand], Proximo)
-        ; Proximo = Antes
+decisao_encaminhamento( D, Cf ) :-
+    ordem_disposicao( Lista ),
+    member( D, Lista ),
+    fact( D, Cf ),
+    corte_certeza( T ),
+    Cf > T,
+    !.
+
+apresentar_default :-
+    nl, write('------------------------------------------------------------'), nl,
+    write('RESULTADO: Transferencia SNS24 - Triagem'), nl,
+    write('(nenhuma disposicao acima do corte de confianca)'), nl.
+
+apresentar( D, Cf ) :-
+    disposicao( D, Txt ),
+    regras_ativas_decisao( D, RegrasAtivas ),
+    nl, write('------------------------------------------------------------'), nl,
+    write('RESULTADO: '), write( Txt ), nl,
+    write('Confianca (facto derivado): '), write( Cf ), nl,
+    nl, write('Explicacao (regras ativas para a decisao):'), nl,
+    mostrar_regras_ativas( RegrasAtivas ),
+    nl, write('Respostas sim (perguntas com grau >= 0.5):'), nl,
+    listar_respostas_positivas.
+
+listar_respostas_positivas :-
+    forall(
+        ( fact( F, C ), C >= 0.5, pergunta( F, T ) ),
+        ( write('  - '), write( T ), nl )
+    ).
+
+regras_ativas_decisao( D, Regras ) :-
+    findall(
+        (Cond, CfRegra, CfCond, CfFinal),
+        (
+            if Cond then D with CfRegra,
+            composed_fact( Cond, CfCond ),
+            CfFinal is CfCond * CfRegra,
+            corte_certeza( T ),
+            CfFinal > T
+        ),
+        Regras
+    ).
+
+mostrar_regras_ativas( [] ) :-
+    write('  - (sem regras ativas acima do corte)'), nl.
+mostrar_regras_ativas( Regras ) :-
+    forall(
+        member( (Cond, CfRegra, CfCond, CfFinal), Regras ),
+        (
+            write('  - if '), write( Cond ),
+            write(' then ... with '), write( CfRegra ),
+            write(' | cond='), write( CfCond ),
+            write(' | final='), write( CfFinal ), nl
         )
-    ; Proximo = Antes
-    ),
-    perguntar_lista_condicional(Resto, Proximo, Final).
+    ).
