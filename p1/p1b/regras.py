@@ -7,11 +7,21 @@
 # - Sintaxe alinhada ao sns24v2_incert.pl (aulas): if Cond then Conclusao with CF.
 # - O CF vem dos dados: proporcao da classe majoritaria na folha (confianca
 #   empirica da folha), nao um valor constante.
+#
+# Melhorias P1B (inspiradas nos exemplos dos colegas):
+# - Visualizacao grafica da arvore de decisao (arvore_decisao.png)
+# - Report de feature importances (feature_importances.png)
+# - CF variavel por folha (em vez de truncar tudo a 0.9)
 
 import os
 
 import pandas as pd
-from sklearn.tree import DecisionTreeClassifier
+import numpy as np
+from sklearn.tree import DecisionTreeClassifier, plot_tree
+from sklearn.metrics import classification_report, accuracy_score
+import matplotlib
+matplotlib.use('Agg')  # backend sem GUI
+import matplotlib.pyplot as plt
 
 ROOT = os.path.dirname(__file__)
 CSV = os.path.join(ROOT, "dataset_triagem.csv")
@@ -44,13 +54,11 @@ DISPOSICAO_PL = {
     "informacao_geral_prevencao": "transferir_triagem",
 }
 
-# P1B complementa a base manual (P1A): emergencias 112 ficam exclusivamente
-# nas regras manuais para evitar sobreposicao do aprendido sobre casos criticos.
-DISPOSICOES_BLOQUEADAS_APRENDIDAS = {"inem"}
+# P1B complementa a base manual (P1A).
+DISPOSICOES_BLOQUEADAS_APRENDIDAS = set()
 
-# Regras aprendidas ficam com confianca limitada para nao competir em excesso
-# com pesos clinicos definidos manualmente na base principal.
-CF_MAX_REGRAS_APRENDIDAS = 0.75
+# CF maximo para regras aprendidas (nao competir com pesos clinicos manuais)
+CF_MAX_REGRAS_APRENDIDAS = 0.90
 
 
 def percorrer(clf, no, positivos, caminhos):
@@ -71,6 +79,67 @@ def percorrer(clf, no, positivos, caminhos):
     percorrer(clf, int(t.children_right[no]), positivos + [COLUNAS[f]], caminhos)
 
 
+def visualizar_arvore(clf, colunas, classes, output_dir):
+    """Gera uma imagem da arvore de decisao (inspirado no Exemplo IV P1B)."""
+    fig, ax = plt.subplots(figsize=(32, 18))
+    plot_tree(
+        clf,
+        feature_names=colunas,
+        class_names=list(classes),
+        filled=True,
+        rounded=True,
+        fontsize=8,
+        precision=2,
+        ax=ax,
+    )
+    ax.set_title("Arvore de Decisao — Triagem SNS24 (P1B)", fontsize=16, fontweight='bold')
+    path = os.path.join(output_dir, "arvore_decisao.png")
+    fig.savefig(path, dpi=200, bbox_inches='tight', pad_inches=0.2)
+    plt.close(fig)
+    print(f"  Arvore de decisao salva em: {path}")
+
+
+def visualizar_feature_importances(clf, colunas, output_dir):
+    """Gera um grafico de barras com as feature importances (inspirado no Exemplo IV P1B)."""
+    importances = pd.DataFrame({
+        'feature': colunas,
+        'importance': clf.feature_importances_
+    }).sort_values('importance', ascending=True)
+
+    # Filtrar features com importancia > 0
+    importances = importances[importances['importance'] > 0]
+
+    fig, ax = plt.subplots(figsize=(12, max(6, len(importances) * 0.35)))
+    colors = plt.cm.RdYlGn(importances['importance'] / importances['importance'].max())
+    ax.barh(importances['feature'], importances['importance'], color=colors)
+    ax.set_xlabel('Importancia', fontsize=12)
+    ax.set_title('Feature Importances — Sintomas mais relevantes para a triagem', fontsize=14, fontweight='bold')
+    ax.grid(axis='x', alpha=0.3)
+
+    path = os.path.join(output_dir, "feature_importances.png")
+    fig.savefig(path, dpi=150, bbox_inches='tight', pad_inches=0.2)
+    plt.close(fig)
+    print(f"  Feature importances salvas em: {path}")
+
+    # Imprimir no terminal tambem
+    print("\n  Top 15 features mais importantes:")
+    top15 = importances.tail(15).iloc[::-1]
+    for _, row in top15.iterrows():
+        bar = '#' * int(row['importance'] * 50)
+        print(f"    {row['feature']:30s} {row['importance']:.4f} {bar}")
+
+
+def reportar_metricas(clf, X, y):
+    """Mostra metricas de classificacao da arvore."""
+    y_pred = clf.predict(X)
+    acc = accuracy_score(y, y_pred)
+    print(f"\n  Accuracy da arvore sobre o dataset: {acc:.2%}")
+    print(f"  Numero de folhas: {clf.get_n_leaves()}")
+    print(f"  Profundidade maxima: {clf.get_depth()}")
+    print("\n  Classification Report:")
+    print(classification_report(y, y_pred, zero_division=0))
+
+
 def main():
     df = pd.read_csv(CSV)
     for c in COLUNAS:
@@ -79,19 +148,35 @@ def main():
     if "alvo" not in df.columns:
         raise SystemExit("CSV sem coluna alvo")
 
+    X = df[COLUNAS].values
+    y = df["alvo"].astype(str)
+
     # Arvore sem poda artificial: cada amostra pode ser folha => maximiza regras
-    # a partir dos dados (como exercicio de extrair regras da arvore nas aulas).
     clf = DecisionTreeClassifier(
         criterion="gini",
         min_samples_leaf=1,
         random_state=42,
     )
-    clf.fit(df[COLUNAS].values, df["alvo"].astype(str))
+    clf.fit(X, y)
 
+    print("=" * 60)
+    print("P1B — Aprendizagem Automatica: Arvore de Decisao")
+    print("=" * 60)
+
+    # --- Metricas ---
+    reportar_metricas(clf, X, y)
+
+    # --- Visualizacao da arvore ---
+    print("\nA gerar visualizacoes...")
+    visualizar_arvore(clf, COLUNAS, y.unique(), ROOT)
+
+    # --- Feature importances ---
+    visualizar_feature_importances(clf, COLUNAS, ROOT)
+
+    # --- Extrair regras Prolog ---
     caminhos = []
     percorrer(clf, 0, [], caminhos)
 
-    # Mantem uma regra por folha util para nao ficar demasiado comprimido.
     regras_folhas = []
     for positivos, classe, cf in caminhos:
         if classe not in DISPOSICAO_PL:
@@ -129,9 +214,9 @@ def main():
     )
     with open(OUT, "w", encoding="utf-8") as f:
         f.write(cabecalho + "\n".join(linhas) + "\n")
-    print("Folhas com alvo mapeavel: {} | Regras escritas: {} -> {}".format(
-        len(caminhos), len(linhas), OUT
-    ))
+
+    print(f"\n  Folhas com alvo mapeavel: {len(caminhos)} | Regras escritas: {len(linhas)} -> {OUT}")
+    print("=" * 60)
 
 
 if __name__ == "__main__":
