@@ -242,14 +242,8 @@ inferir_para_frente.
 
 % 4. INTERFACE
 
-% Ja respondeu (sim com 1.0 ou nao com 0.0 — ambos bloqueiam nova pergunta).
 ja_sabe( F ) :-
     fact( F, _ ), !.
-
-% Resposta afirmativa para ramificar perguntas de aprofundamento.
-resposta_sim( F ) :-
-    fact( F, C ),
-    C >= 0.5.
 
 perguntar( F ) :-
     ja_sabe( F ), !.
@@ -257,140 +251,73 @@ perguntar( F ) :-
     pergunta( F, Texto ),
     nl, write('  '), write( Texto ), write('? ' ),
     read( X ),
-    retractall( fact( F, _ ) ),
     ( (X == s ; X == sim) ->
         assert( fact( F, 1.0 ) )
     ;
         assert( fact( F, 0.0 ) )
     ).
 
-perguntar_e_inferir( F ) :-
-    perguntar( F ),
-    inferir_para_frente.
-
-decidido_grave :-
-    fact( inem, C ),
-    C > 0.08,
-    !.
-decidido_grave :-
-    fact( adr_su, C2 ),
-    C2 > 0.08,
-    !.
-
-perguntar_se_nao_grave( _ ) :-
-    decidido_grave, !.
-perguntar_se_nao_grave( F ) :-
-    perguntar_e_inferir( F ).
-
-
-% 5. SUBFLUXOS (ordem e nomes distintos do projetoV4 do colega:
-%    aqui febre ANTES do bloco de contexto/risco)
-
-bloqueio_emergencia :-
-    nl, write('--- Alerta: emergencia ---'), nl,
-    perguntar_se_nao_grave( compromisso_via_aerea ),
-    perguntar_se_nao_grave( dor_toracica ),
-    perguntar_se_nao_grave( pieira_ou_tiragem ),
-    perguntar_se_nao_grave( alteracao_consciencia ),
-    perguntar_se_nao_grave( convulsoes ),
-    perguntar_se_nao_grave( fraqueza_lado_corpo ),
-    perguntar_se_nao_grave( sangramento_abundante ),
-    perguntar_se_nao_grave( tosse_com_sangue ),
-    perguntar_se_nao_grave( confusao ).
-
-triagem_termica :-
-    nl, write('--- Febre e sinais associados ---'), nl,
-    perguntar_se_nao_grave( febre ),
-    ( resposta_sim( febre ) ->
-        perguntar_se_nao_grave( febre_alta_40 ),
-        ( resposta_sim( febre_alta_40 ) -> true
-        ;   perguntar_se_nao_grave( febre_persistente ),
-            ( resposta_sim( febre_persistente ) ->
-                perguntar_se_nao_grave( nao_melhora_antipiretico )
-            ;   true )
-        ),
-        perguntar_se_nao_grave( convulsao_febril ),
-        perguntar_se_nao_grave( manchas_pele ),
-        perguntar_se_nao_grave( dor_cabeca_forte ),
-        ( resposta_sim( dor_cabeca_forte ) ->
-            perguntar_se_nao_grave( rigidez_pescoco ),
-            perguntar_se_nao_grave( sensibilidade_luz )
-        ;   true )
-    ;   true ).
-
-triagem_perfil_risco :-
-    nl, write('--- Perfil e contexto ---'), nl,
-    perguntar_se_nao_grave( idade_risco ),
-    perguntar_se_nao_grave( doenca_cronica ),
-    perguntar_se_nao_grave( tratamento_oncologico ),
-    perguntar_se_nao_grave( gravidez ),
-    perguntar_se_nao_grave( imunodeprimido ),
-    perguntar_se_nao_grave( trauma_recente ),
-    ( resposta_sim( trauma_recente ) -> perguntar_se_nao_grave( sintomas_pos_trauma ) ; true ),
-    perguntar_se_nao_grave( contacto_recente ),
-    perguntar_se_nao_grave( apoio_domicilio ).
-
-triagem_respiratoria :-
-    nl, write('--- Via aerea e tosse ---'), nl,
-    perguntar_se_nao_grave( falta_ar ),
-    ( resposta_sim( falta_ar ) ->
-        perguntar_se_nao_grave( falta_ar_repouso ),
-        perguntar_se_nao_grave( falta_ar_leve )
-    ;   true ),
-    perguntar_se_nao_grave( tosse ),
-    ( resposta_sim( tosse ) ->
-        perguntar_se_nao_grave( tosse_agravada ),
-        perguntar_se_nao_grave( tosse_persistente ),
-        perguntar_se_nao_grave( tosse_produtiva )
-    ;   true ),
-    perguntar_se_nao_grave( dor_garganta ),
-    perguntar_se_nao_grave( congestao_nasal ),
-    perguntar_se_nao_grave( espirros ).
-
-triagem_chemosensorial :-
-    nl, write('--- Olfato e paladar ---'), nl,
-    perguntar_se_nao_grave( alteracao_olfato ),
-    ( resposta_sim( alteracao_olfato ) ->
-        perguntar_se_nao_grave( olfato_quimio ),
-        ( resposta_sim( olfato_quimio ) -> true
-        ;   perguntar_se_nao_grave( olfato_trauma ) )
-    ;   true ),
-    perguntar_se_nao_grave( alteracao_paladar ),
-    ( resposta_sim( alteracao_paladar ) ->
-        perguntar_se_nao_grave( paladar_quimio ),
-        ( resposta_sim( paladar_quimio ) -> true
-        ;   perguntar_se_nao_grave( paladar_trauma ) )
-    ;   true ).
-
-triagem_digestiva :-
-    nl, write('--- Abdomen e hidratacao ---'), nl,
-    perguntar_se_nao_grave( nausea ),
-    perguntar_se_nao_grave( vomitos ),
-    ( resposta_sim( vomitos ) -> perguntar_se_nao_grave( vomitos_intensos ) ; true ),
-    perguntar_se_nao_grave( diarreia ),
-    ( resposta_sim( diarreia ) -> perguntar_se_nao_grave( diarreia_grave ) ; true ),
-    perguntar_se_nao_grave( dor_abdominal ),
-    ( resposta_sim( dor_abdominal ) -> perguntar_se_nao_grave( dor_abdominal_forte ) ; true ),
-    perguntar_se_nao_grave( disuria ),
-    perguntar_se_nao_grave( desidratacao ).
-
-triagem_sistema_geral :-
-    nl, write('--- Estado geral ---'), nl,
-    perguntar_se_nao_grave( fadiga_mialgias ),
-    perguntar_se_nao_grave( agravamento ),
-    ( resposta_sim( agravamento ) -> perguntar_se_nao_grave( agravamento_48h ) ; true ).
-
-
 iniciar :-
     retractall( fact( _, _ ) ),
     banner,
-    bloqueio_emergencia,
-    triagem_termica,
-    triagem_perfil_risco,
-    triagem_respiratoria,
-    triagem_chemosensorial,
-    triagem_digestiva,
-    triagem_sistema_geral,
+    % --- Sinais de emergencia ---
+    perguntar( compromisso_via_aerea ),
+    perguntar( dor_toracica ),
+    perguntar( pieira_ou_tiragem ),
+    perguntar( alteracao_consciencia ),
+    perguntar( convulsoes ),
+    perguntar( fraqueza_lado_corpo ),
+    perguntar( sangramento_abundante ),
+    perguntar( tosse_com_sangue ),
+    perguntar( confusao ),
+    perguntar( sonolencia_anormal ),
+    % --- Febre e sinais neurologicos ---
+    perguntar( febre ),
+    perguntar( febre_alta_40 ),
+    perguntar( febre_persistente ),
+    perguntar( nao_melhora_antipiretico ),
+    perguntar( convulsao_febril ),
+    perguntar( manchas_pele ),
+    perguntar( dor_cabeca ),
+    perguntar( dor_cabeca_forte ),
+    perguntar( rigidez_pescoco ),
+    perguntar( sensibilidade_luz ),
+    % --- Via aerea e tosse ---
+    perguntar( falta_ar ),
+    perguntar( falta_ar_repouso ),
+    perguntar( falta_ar_leve ),
+    perguntar( tosse ),
+    perguntar( tosse_persistente ),
+    perguntar( tosse_produtiva ),
+    perguntar( dor_garganta ),
+    perguntar( congestao_nasal ),
+    perguntar( espirros ),
+    perguntar( alteracao_olfato ),
+    perguntar( alteracao_paladar ),
+    % --- Abdomen e hidratacao ---
+    perguntar( nausea ),
+    perguntar( vomitos ),
+    perguntar( vomitos_intensos ),
+    perguntar( diarreia ),
+    perguntar( diarreia_grave ),
+    perguntar( dor_abdominal ),
+    perguntar( dor_abdominal_forte ),
+    perguntar( disuria ),
+    perguntar( desidratacao ),
+    % --- Estado geral ---
+    perguntar( fadiga_mialgias ),
+    perguntar( agravamento ),
+    perguntar( agravamento_48h ),
+    % --- Perfil e contexto ---
+    perguntar( imunodeprimido ),
+    perguntar( tratamento_oncologico ),
+    perguntar( gravidez ),
+    perguntar( doenca_cronica ),
+    perguntar( idade_risco ),
+    perguntar( apoio_domicilio ),
+    perguntar( contacto_recente ),
+    perguntar( trauma_recente ),
+    perguntar( sintomas_pos_trauma ),
     concluir.
 
 banner :-
