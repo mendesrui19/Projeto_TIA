@@ -68,4 +68,31 @@ mostrar_prova( ou(Prova), Indent ) :-
     Indent2 is Indent + 2,
     mostrar_prova( Prova, Indent2 ).
 
+% ============================================================
+% 4. ENTRADAS DE EXPLICACAO PARA O UTILIZADOR
+% ============================================================
+
+% porque( +P ) - mostra a arvore de prova para P
+porque( P ) :-
+    demo( P, Prova ), !,
+    nl, write('=== EXPLICACAO PARA: '), write( P ), write(' ==='), nl,
+    mostrar_prova( Prova ), nl.
+porque( P ) :-
+    nl, write('Nao consegui provar: '), write( P ), nl.
+
+% explicar - explica a disposicao escolhida pela ultima sessao
+explicar :-
+    decisao_encaminhamento( D, Cf ), !,
+    nl, write('Disposicao escolhida: '), write( D ),
+    write(' (cf='), write( Cf ), write(')'), nl,
+    porque( D ).
+explicar :-
+    nl, write('Ainda nao ha disposicao concluida. Corra ?- iniciar.'), nl.
+
+% factos_conhecidos - lista todos os factos atuais (debug)
+factos_conhecidos :-
+    nl, write('=== FACTOS CONHECIDOS ==='), nl,
+    forall( fact( F, Cf ),
+            ( write('  '), write( F ), write(' [cf='), write( Cf ), write(']'), nl ) ),
+    nl.
 

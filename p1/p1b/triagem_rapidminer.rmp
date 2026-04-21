@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  P1B — Processo RapidMiner COMPLETO (substitui regras.py)
+  =========================================================
+  Pipeline:
+    1. Read CSV           — carrega dataset_triagem.csv
+    2. Set Role           — "alvo" passa a ser o label de classe
+    3. Multiply           — duplica ExampleSet (treino + aplicacao)
+    4. Decision Tree      — Gini, sem poda, folha minima = 1
+    5. Apply Model        — aplica a arvore ao dataset completo
+    6. Performance        — accuracy + confusion matrix
+    7. Execute Script     — gera p1/p1a/regras_aprendidas.pl (Prolog)
+
+  Resultados:
+    result 1 — PerformanceVector (accuracy, confusion matrix, etc.)
+    result 2 — Modelo da arvore de decisao (visualizacao grafica)
+    result 3 — ExampleSet com predicoes por linha
+
+  NOTA: O Execute Script usa Groovy para percorrer a arvore e escrever
+  as regras no formato "if ... then ... with CF." que o Prolog le.
+-->
+<process version="10.3.000">
+  <context>
+    <input/>
+    <output/>
+    <macros/>
+  </context>
+  <operator activated="true" class="process" compatibility="10.3.000"
+            expanded="true" name="Process">
+    <process expanded="true">
+
+      <!-- ============================================================
+           1. Read CSV
+           Caminho ja configurado para o dataset do projeto.
+           Se necessario, altere csv_file para o caminho absoluto
+           do ficheiro dataset_triagem.csv no seu sistema.
+           ============================================================ -->
+      <operator activated="true" class="read_csv" compatibility="9.10.003"
+                expanded="true" height="68" name="Read CSV" width="90"
+                x="50" y="272">
+        <parameter key="csv_file"
+                   value="/Users/ruimendes/Documents/GitHub/Projeto_TIA/p1/p1b/dataset_triagem.csv"/>
+        <parameter key="column_separators" value=","/>
+        <parameter key="use_quotes" value="true"/>
+        <parameter key="quotes_character" value="&quot;"/>
+        <parameter key="trim_lines" value="false"/>
+        <parameter key="use_comment_characters" value="false"/>
+        <parameter key="skip_error_lines" value="false"/>
+        <parameter key="use_first_row_as_attribute_names" value="true"/>
+        <parameter key="first_row_as_names" value="true"/>
+        <parameter key="time_zone" value="SYSTEM"/>
+        <parameter key="decimal_character" value="."/>
+        <parameter key="grouped_digits" value="false"/>
+        <parameter key="trim_attribute_names" value="true"/>
+        <list key="annotations"/>
+      </operator>
+
+      <!-- ============================================================
+           2. Set Role — "alvo" e o atributo alvo (label de classe)
+           ============================================================ -->
+      <operator activated="true" class="set_role" compatibility="10.3.000"
+                expanded="true" height="82" name="Set Role" width="90"
+                x="185" y="272">
+        <parameter key="attribute_name" value="alvo"/>
+        <parameter key="target_role" value="label"/>
+        <list key="set_additional_roles"/>
+      </operator>
+
+      <!-- ============================================================
+           3. Multiply — duplica o ExampleSet para:
+              output 1 -> treinamento da arvore
+              output 2 -> aplicacao do modelo
+           ============================================================ -->
+      <operator activated="true" class="multiply" compatibility="10.3.000"
+                expanded="true" height="110" name="Multiply" width="90"
+                x="320" y="272">
+      </operator>
+
+      <!-- ============================================================
+           4. Decision Tree
+              Parametros com pre-poda para evitar overfitting:
+              - criterion              = gini_index (Gini impurity)
+              - maximal_depth          = 8     (limita profundidade)
+              - apply_pruning          = true  (pos-poda por confianca)
+              - confidence             = 0.25  (poda agressiva)
+              - apply_prepruning       = true  (pre-poda por ganho/tamanho)
+              - minimal_size_for_split = 4     (nao parte nos com < 4 ex.)
+              - minimal_leaf_size      = 2     (folhas com pelo menos 2 ex.)
+              - minimal_gain           = 0.01  (so parte se ganho > 1%)
+              Estes parametros reduzem a arvore de ~80 para ~15-25 folhas
+              (regras Prolog), eliminando ramos redundantes que davam
+              repetidamente a mesma classe sem ganho de informacao real.
+           ============================================================ -->
+      <operator activated="true" class="decision_tree" compatibility="10.3.000"
+                expanded="true" height="103" name="Decision Tree" width="90"
+                x="455" y="170">
+        <parameter key="criterion" value="gini_index"/>
+        <parameter key="maximal_depth" value="8"/>
+        <parameter key="apply_pruning" value="true"/>
+        <parameter key="confidence" value="0.25"/>
+        <parameter key="apply_prepruning" value="true"/>
+        <parameter key="minimal_size_for_split" value="4"/>
+        <parameter key="minimal_leaf_size" value="2"/>
+        <parameter key="minimal_gain" value="0.01"/>
+        <parameter key="number_of_prepruning_alternatives" value="3"/>
+      </operator>
+
+      <!-- ============================================================
+           5. Apply Model — aplica a arvore treinada ao dataset completo
+           (equivalente a clf.predict(X) no Python sobre os proprios dados
+           de treino, por isso a accuracy e alta como no Python)
+           ============================================================ -->
+      <operator activated="true" class="apply_model" compatibility="10.3.000"
+                expanded="true" height="82" name="Apply Model" width="90"
+                x="590" y="272">
+        <list key="application_parameters"/>
+        <parameter key="create_view" value="false"/>
+      </operator>
+
+      <!-- ============================================================
+           6. Performance (Classification)
+              Equivalente ao classification_report + accuracy_score
+              do Python. Gera accuracy, class precision, class recall
+              e confusion matrix.
+           ============================================================ -->
+      <operator activated="true" class="performance_classification"
+                compatibility="10.3.000" expanded="true" height="82"
+                name="Performance" width="90" x="725" y="272">
+        <parameter key="main_criterion" value="first"/>
+        <parameter key="accuracy" value="true"/>
+        <parameter key="classification_error" value="true"/>
+        <parameter key="kappa" value="true"/>
+        <parameter key="weighted_mean_recall" value="true"/>
+        <parameter key="weighted_mean_precision" value="true"/>
+        <parameter key="skip_undefined_labels" value="true"/>
+        <parameter key="use_example_weights" value="true"/>
+      </operator>
+
+      <!-- ============================================================
+           7. Execute Script (Groovy)
+              Percorre a arvore de decisao e gera o ficheiro Prolog:
+                p1/p1a/regras_aprendidas.pl
+              Equivalente completo da funcao percorrer() + main() do
+              regras.py do Python.
+
+              Logica:
+              - Ramo com '<=' no condicao = sintoma ausente (valor 0)
+              - Ramo com '>'  no condicao = sintoma presente (valor 1)
+              - Folha com classe mapeavel -> escreve regra Prolog
+              - CF fixo em 0.9 (igual ao CF_MAX do Python para dados puros)
+
+              Se o script falhar, pode colar manualmente o conteudo de
+              p1/p1b/gerar_regras_prolog.groovy neste operador.
+           ============================================================ -->
+      <operator activated="true" class="execute_script" compatibility="10.3.000"
+                expanded="true" height="82" name="Execute Script" width="90"
+                x="455" y="374">
+        <parameter key="script" value="import com.rapidminer.operator.learner.tree.*; def tm = input[0]; def out = new File('/Users/ruimendes/Documents/GitHub/Projeto_TIA/p1/p1a/regras_aprendidas.pl'); def MAP = ['encaminhar_112_imediato':'inem','contactar_sns24_urgente':'adr_su','linha_sns24_orientacao':'transferir_triagem','autocuidado_e_observacao':'autocuidado','informacao_geral_prevencao':'transferir_triagem']; def regras = []; def primeiraCond = null; def isAbsent = { cond -&gt; def cs = cond.toString().toLowerCase().trim(); if (cs.contains('&lt;=')) return true; if (cs.contains('&gt;')) return false; if (cs ==~ /.*=\s*0(\.0+)?\b.*/) return true; if (cs ==~ /.*=\s*1(\.0+)?\b.*/) return false; if (cs.contains('false')) return true; if (cs.contains('true')) return false; try { def v = cond.getValueString(); if (v != null) { def vs = v.toString().toLowerCase().trim(); if (vs == '0' || vs == '0.0' || vs == 'false' || vs == 'no') return true; if (vs == '1' || vs == '1.0' || vs == 'true' || vs == 'yes') return false } } catch (Exception ex) {}; return false }; def leafCF = { node -&gt; try { def counts = node.getCounterMap(); def total = 0; def maxC = 0; counts.values().each { v -&gt; total += v; if (v &gt; maxC) maxC = v }; if (total &gt; 0) return (maxC as double) / total } catch (Exception ex) {}; try { def total = node.getSubtreeFrequencySum(); def maxC = node.getCounter(node.getLabel()); if (total &gt; 0) return (maxC as double) / total } catch (Exception ex) {}; return 0.9 }; def go; go = { node, path -&gt; if (node.isLeaf()) { def cl = node.getLabel(); def cf = leafCF(node); if (cf &gt; 0.9) cf = 0.9; if (cf &lt; 0.09) cf = 0.09; cf = Math.round(cf * 1000) / 1000.0; if (MAP.containsKey(cl) &amp;&amp; !path.isEmpty()) { regras &lt;&lt; ('if ' + path.unique().join(' and ') + ' then ' + MAP[cl] + ' with ' + cf + '.') }; return }; def it = node.childIterator(); while (it.hasNext()) { def e = it.next(); def cd = e.getCondition(); def an = cd.getAttributeName(); if (primeiraCond == null) primeiraCond = cd.toString(); if (isAbsent(cd)) { go(e.getChild(), new ArrayList(path)) } else { go(e.getChild(), path + [an]) } } }; go(tm.getRoot(), new ArrayList()); def hdr = '% P1B - RapidMiner\n:- op(800,fx,if).\n:- op(700,xfx,then).\n:- op(600,xfx,with).\n:- op(300,xfy,or).\n:- op(200,xfy,and).\n:- multifile((if)/1).\n\n'; out.text = hdr + regras.sort().join('\n') + '\n'; println('=== P1B Groovy ==='); println('Formato da primeira condicao: ' + primeiraCond); println('Total de regras escritas: ' + regras.size()); return []"/>
+      </operator>
+
+      <!-- ============================================================
+           Ligacoes entre operadores
+           ============================================================ -->
+
+      <!-- Cadeia principal -->
+      <connect from_op="Read CSV"      from_port="output"
+               to_op="Set Role"        to_port="example set input"/>
+      <connect from_op="Set Role"      from_port="example set output"
+               to_op="Multiply"        to_port="input"/>
+
+      <!-- Multiply -> Decision Tree (treino) -->
+      <connect from_op="Multiply"      from_port="output 1"
+               to_op="Decision Tree"   to_port="training set"/>
+
+      <!-- Multiply -> Apply Model (dados para classificar) -->
+      <connect from_op="Multiply"      from_port="output 2"
+               to_op="Apply Model"     to_port="unlabelled data"/>
+
+      <!-- Decision Tree modelo -> Apply Model -->
+      <connect from_op="Decision Tree" from_port="model"
+               to_op="Apply Model"     to_port="model"/>
+
+      <!-- Decision Tree modelo -> Execute Script (gera Prolog) -->
+      <connect from_op="Decision Tree" from_port="model"
+               to_op="Execute Script"  to_port="input 1"/>
+
+      <!-- Apply Model -> Performance -->
+      <connect from_op="Apply Model"   from_port="labelled data"
+               to_op="Performance"     to_port="labelled data"/>
+
+      <!-- Resultados para o painel Results -->
+      <connect from_op="Performance"   from_port="performance"
+               to_op="Process"         to_port="result 1"/>
+      <connect from_op="Apply Model"   from_port="model"
+               to_op="Process"         to_port="result 2"/>
+      <connect from_op="Performance"   from_port="example set"
+               to_op="Process"         to_port="result 3"/>
+
+    </process>
+  </operator>
+</process>

@@ -13,11 +13,8 @@
 :- op( 300, xfy, or).
 :- op( 200, xfy, and).
 
-ja_sabe( F ) :-
-    fact( F, _ ), !.
-
 perguntar( F ) :-
-    ja_sabe( F ), !.
+    fact( F, _ ), !.
 perguntar( F ) :-
     pergunta( F, Texto ),
     nl, write('[  '), write( Texto ), write('? '),
@@ -56,6 +53,10 @@ iniciar :-
     fase_febre,
     % --- 3. Neurologico ---
     fase_neurologico,
+    % Re-verifica emergencia: cefaleia + rigidez/manchas/foto-fobia + febre
+    % derivam cefaleia_grave -> INEM (meningite, hemorragia subaracnoideia).
+    ( tentar_concluir_emergencia -> true
+    ;
     % --- 4. Respiratorio ---
     fase_respiratorio,
     % --- 5. Garganta / nariz / olfato / paladar ---
@@ -70,21 +71,29 @@ iniciar :-
     fase_contexto,
     % --- 10. Conclusao final ---
     concluir
+    )
     ).
 
 % ============================================================
 % FASE 1: Emergencia
 % ============================================================
 
+% Sinais vermelhos do SNS24 — qualquer um destes deve disparar INEM/112.
+% Inclui: via aerea, dor toracica, estado mental (consciencia/confusao/sonolencia),
+% deficit neurologico, hemorragia, hemoptise, e compromisso respiratorio
+% (pieira/tiragem/sibilancia).
 fase_emergencia :-
     nl, write('--- Sinais de alarme ---'), nl,
     perguntar( compromisso_via_aerea ),
     perguntar( dor_toracica ),
     perguntar( alteracao_consciencia ),
+    perguntar( confusao ),
+    perguntar( sonolencia_anormal ),
     perguntar( convulsoes ),
     perguntar( fraqueza_lado_corpo ),
     perguntar( sangramento_abundante ),
-    perguntar( tosse_com_sangue ).
+    perguntar( tosse_com_sangue ),
+    perguntar( pieira_ou_tiragem ).
 
 % Corre o motor; se ja ha INEM -> apresenta e para (true no iniciar).
 tentar_concluir_emergencia :-
@@ -115,17 +124,16 @@ fase_febre :-
 % FASE 3: Neurologico
 % ============================================================
 
+% confusao, sonolencia_anormal e pieira_ou_tiragem ja foram perguntados
+% na fase_emergencia (sao sinais vermelhos). Aqui so detalhamos cefaleia.
 fase_neurologico :-
     nl, write('--- Sintomas neurologicos ---'), nl,
     perguntar( dor_cabeca ),
-    perguntar( confusao ),
-    perguntar( sonolencia_anormal ),
-    ( (respondeu_sim(dor_cabeca) ; respondeu_sim(confusao) ; respondeu_sim(sonolencia_anormal)) ->
+    ( respondeu_sim( dor_cabeca ) ->
         perguntar_se( dor_cabeca, dor_cabeca_forte ),
         perguntar_se( dor_cabeca, rigidez_pescoco ),
         perguntar_se( dor_cabeca, sensibilidade_luz ),
-        perguntar( manchas_pele ),
-        perguntar( pieira_ou_tiragem )
+        perguntar( manchas_pele )
     ;
         true
     ).
@@ -226,7 +234,8 @@ banner :-
     nl,
     write('   TRIAGEM SNS24  -  808 24 24 24   |   Emergencia: 112'), nl,
     write('   Responda a cada pergunta com:  s.   (sim)    ou   n.   (nao)'), nl,
-    write('   (nao esquecer o ponto final depois da letra!)'), nl.
+    write('   (nao esquecer o ponto final depois da letra!)'), nl,
+    write('   Apos terminar pode usar:  ?- explicar.   ou   ?- porque(Disposicao).'), nl.
 
 concluir :-
     inferir_para_frente,
@@ -252,7 +261,7 @@ apresentar( D, Cf ) :-
     % --- Explicacao P1MAX: arvore de prova ---
     nl, write('--- Arvore de Prova (P1MAX) ---'), nl,
     ( demo( D, Prova ) ->
-        mostrar_prova( Prova, 0 )
+        mostrar_prova( Prova )
     ;
         write('  (sem arvore de prova disponivel para esta disposicao)'), nl
     ).
